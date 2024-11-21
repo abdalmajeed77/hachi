@@ -39,7 +39,7 @@ Clone the repository:
 
 bash
 Copy code
-git clone https://github.com/your-repository/hachi.git
+git clone https://github.com/abdalmajeed77/hachi.git
 cd hachi
 Run the script:
 
