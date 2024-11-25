@@ -2,7 +2,6 @@ import subprocess
 from scapy.all import *
 import os
 from colorama import init, Fore, Style
-import time
 
 # Initialize colorama
 init()
@@ -23,9 +22,7 @@ languages = {
         'option_10': "10. Exit",
         'invalid_choice': "Invalid choice. Please try again.",
         'exit_message': "Exiting...",
-        'available_networks': "Available networks:",
-        'scanning': "Scanning for networks...",
-        'no_adapters': "No network adapters found.",
+        'available_networks': "Available networks:"
     },
     'ar': {
         'menu': "القائمة:",
@@ -41,9 +38,7 @@ languages = {
         'option_10': "10. خروج",
         'invalid_choice': "اختيار غير صالح. حاول مرة اخرى.",
         'exit_message': "جارٍ الخروج...",
-        'available_networks': "الشبكات المتاحة:",
-        'scanning': "جارٍ فحص الشبكات...",
-        'no_adapters': "لم يتم العثور على محولات شبكة.",
+        'available_networks': "الشبكات المتاحة:"
     },
     'hi': {
         'menu': "मेनू:",
@@ -59,9 +54,7 @@ languages = {
         'option_10': "10. बाहर निकलें",
         'invalid_choice': "अमान्य विकल्प। कृपया पुन: प्रयास करें।",
         'exit_message': "बाहर निकल रहा है...",
-        'available_networks': "उपलब्ध नेटवर्क:",
-        'scanning': "नेटवर्क स्कैन किया जा रहा है...",
-        'no_adapters': "कोई नेटवर्क एडेप्टर नहीं मिला।",
+        'available_networks': "उपलब्ध नेटवर्क:"
     }
 }
 
@@ -72,9 +65,9 @@ def show_banner():
  _    _            _     _ 
 | |  | |          | |   (_)
 | |__| | __ _  ___| |__  _ 
-|  __  |/ _` |/ __| '_ \\| |
+|  __  |/ _` |/ __| '_ \| |
 | |  | | (_| | (__| | | | |
-|_|  |_|\\__,_|\\___|_| |_|_|  
+|_|  |_|\__,_|\___|_| |_|_|  
 {Style.RESET_ALL}
 """
     print(banner)
@@ -104,74 +97,50 @@ def list_network_adapters():
     adapters = [line.split()[0] for line in lines if 'IEEE' in line]
     return adapters
 
-# Function to enable monitor mode on the interface
+# Function to enable monitor mode
 def enable_monitor_mode(interface):
-    print(f"Enabling monitor mode on {interface}...")
-    subprocess.run(["sudo", "ip", "link", "set", interface, "down"], check=True)
-    subprocess.run(["sudo", "iw", interface, "set", "type", "monitor"], check=True)
-    subprocess.run(["sudo", "ip", "link", "set", interface, "up"], check=True)
+    subprocess.run(['sudo', 'ifconfig', interface, 'down'], check=True)
+    subprocess.run(['sudo', 'iwconfig', interface, 'mode', 'monitor'], check=True)
+    subprocess.run(['sudo', 'ifconfig', interface, 'up'], check=True)
+    print(f"Enabled monitor mode on {interface}")
 
-# Function to disable monitor mode on the interface
+# Function to disable monitor mode
 def disable_monitor_mode(interface):
-    print(f"Disabling monitor mode on {interface}...")
-    subprocess.run(["sudo", "ip", "link", "set", interface, "down"], check=True)
-    subprocess.run(["sudo", "iw", interface, "set", "type", "managed"], check=True)
-    subprocess.run(["sudo", "ip", "link", "set", interface, "up"], check=True)
+    subprocess.run(['sudo', 'ifconfig', interface, 'down'], check=True)
+    subprocess.run(['sudo', 'iwconfig', interface, 'mode', 'managed'], check=True)
+    subprocess.run(['sudo', 'ifconfig', interface, 'up'], check=True)
+    print(f"Disabled monitor mode on {interface}")
 
-# Function to scan networks with channel hopping
-def scan_networks(interface, show_hidden=True):
-    """
-    Scans for available networks using the specified interface.
-
-    Parameters:
-        interface (str): The network interface in monitor mode.
-        show_hidden (bool): Whether to include hidden networks in the results.
-
-    Returns:
-        list: A list of detected networks with SSID and BSSID.
-    """
-    enable_monitor_mode(interface)
-    networks = {}
-
-    def packet_handler(packet):
-        if packet.haslayer(Dot11Beacon):
-            ssid = packet[Dot11Elt].info.decode(errors='ignore') if packet[Dot11Elt].info else ''
-            bssid = packet[Dot11].addr2
-            channel = int(ord(packet[Dot11Elt:3].info)) if packet[Dot11Elt:3] else None
-            if ssid == '' and not show_hidden:
-                return
-            networks[bssid] = {"SSID": ssid if ssid else "<Hidden>", "Channel": channel}
-
-    print(f"Scanning for networks on {interface} (Press Ctrl+C to stop)...")
-
-    try:
-        # Channel hopping on common Wi-Fi channels (1, 6, 11)
-        channels = [1, 6, 11]
-        for channel in channels:
-            os.system(f"sudo iw dev {interface} set channel {channel}")
-            sniff(iface=interface, prn=packet_handler, timeout=5)
-
-    except KeyboardInterrupt:
-        print("\nScan interrupted by user.")
-    finally:
-        disable_monitor_mode(interface)
-
-    # Display networks
-    if networks:
-        print("\nDetected Networks:")
-        print(f"{'No.':<5}{'SSID':<30}{'BSSID':<20}{'Channel':<10}")
-        print("=" * 65)
-        for idx, (bssid, data) in enumerate(networks.items(), start=1):
-            print(f"{idx:<5}{data['SSID']:<30}{bssid:<20}{data['Channel']:<10}")
-    else:
-        print("\nNo networks detected.")
+# Function to scan networks
+def scan_networks(interface, show_hidden, lang_dict):
+    networks = []
     
-    return list(networks.values())
+    def packet_handler(packet):
+        if packet.haslayer(Dot11Beacon) or packet.haslayer(Dot11ProbeResp):
+            ssid = packet[Dot11Elt].info.decode(errors='ignore')
+            bssid = packet[Dot11].addr2
+            if ssid == '' and show_hidden:
+                ssid = '<Hidden>'
+            if {'ssid': ssid, 'bssid': bssid} not in networks:
+                networks.append({'ssid': ssid, 'bssid': bssid})
+
+    print(f"Scanning for networks on {interface}...")
+    enable_monitor_mode(interface)
+    sniff(iface=interface, prn=packet_handler, timeout=10)
+    disable_monitor_mode(interface)
+
+    print(lang_dict['available_networks'])
+    for i, net in enumerate(networks):
+        print(f"{i + 1}. SSID: {net['ssid']} | BSSID: {net['bssid']}")
+    
+    return networks
 
 # Function to capture packets
 def capture_packets(interface, bssid, lang_dict):
     print(f"Capturing packets on {interface} for BSSID {bssid}...")
+    enable_monitor_mode(interface)
     subprocess.run(["airodump-ng", interface, "-w", "capture", "--output-format", "cap", "--bssid", bssid], check=True)
+    disable_monitor_mode(interface)
 
 # Function to create wordlist
 def create_wordlist(lang_dict):
@@ -187,11 +156,11 @@ def create_wordlist(lang_dict):
 
 # Function to generate custom input for password cracking
 def generate_custom_input(lang_dict):
-    length = int(input(lang_dict['enter_password_length']))
-    use_uppercase = input(lang_dict['include_uppercase']).lower() == 'y'
-    use_lowercase = input(lang_dict['include_lowercase']).lower() == 'y'
-    use_digits = input(lang_dict['include_digits']).lower() == 'y'
-    use_special = input(lang_dict['include_special']).lower() == 'y'
+    length = int(input("Enter the length of the password to crack: "))
+    use_uppercase = input("Include uppercase letters? (y/n): ").lower() == 'y'
+    use_lowercase = input("Include lowercase letters? (y/n): ").lower() == 'y'
+    use_digits = input("Include digits? (y/n): ").lower() == 'y'
+    use_special = input("Include special characters? (y/n): ").lower() == 'y'
 
     charset = ''
     if use_uppercase:
@@ -219,10 +188,10 @@ def crack_password(cap_file, wordlist=None, use_gpu=False, custom_input=None, us
         if use_hashcat:
             # Construct Hashcat mask based on user input
             hashcat_mask = '?1' * length
-            hashcat_charsets = f'-1{charset}'
+            hashcat_charsets = f'-1 {charset}'
 
             print(f"Cracking password using custom input with Hashcat...")
-            subprocess.run(["hashcat", "-m", "2500", hashcat_charsets, cap_file, hashcat_mask], check=True)
+            subprocess.run(["hashcat", "-m", "2500", hashcat_charsets, cap_file, hashcat_mask], check=True
         else:
             print(f"Cracking password using custom input with Aircrack-ng...")
             wordlist_file = "custom_wordlist.txt"
@@ -233,6 +202,8 @@ def crack_password(cap_file, wordlist=None, use_gpu=False, custom_input=None, us
                             # Continue this for the length of the password
                             if length == 3:
                                 f.write(f"{ch1}{ch2}{ch3}\n")
+                            # Add more nested loops for longer passwords
+
             subprocess.run(["aircrack-ng", "-w", wordlist_file, cap_file], check=True)
 
 # Install tools
@@ -266,34 +237,34 @@ def main():
             install_tools()
         elif choice == '2':
             adapters = list_network_adapters()
-            if adapters:
-                for adapter in adapters:
-                    print(adapter)
-            else:
-                print(lang_dict['no_adapters'])
+            for adapter in adapters:
+                print(adapter)
         elif choice == '3':
-            adapters = list_network_adapters()
-            if adapters:
-                for i, adapter in enumerate(adapters):
-                    print(f"{i + 1}. {adapter}")
-                adapter_choice = int(input("Select an adapter by number: ")) - 1
-                interface = adapters[adapter_choice]
-                show_hidden = input("Show hidden networks? (y/n): ").lower() == 'y'
-                scan_networks(interface, show_hidden, lang_dict)
-            else:
-                print(lang_dict['no_adapters'])
+            interface = input("Enter interface for scanning: ")
+            show_hidden = input("Show hidden networks? (y/n): ").lower() == 'y'
+            scan_networks(interface, show_hidden, lang_dict)
         elif choice == '4':
-            print("Capture packets functionality not implemented yet.")
+            interface = input("Enter interface for capturing: ")
+            bssid = input("Enter BSSID to capture: ")
+            capture_packets(interface, bssid, lang_dict)
         elif choice == '5':
             create_wordlist(lang_dict)
         elif choice == '6':
-            print("Cracking password (CPU) functionality not implemented yet.")
+            cap_file = input("Enter the capture file: ")
+            wordlist = input("Enter wordlist file: ")
+            crack_password(cap_file, wordlist=wordlist)
         elif choice == '7':
-            print("Cracking password (GPU) functionality not implemented yet.")
+            cap_file = input("Enter the capture file: ")
+            wordlist = input("Enter wordlist file: ")
+            crack_password(cap_file, wordlist=wordlist, use_gpu=True)
         elif choice == '8':
-            print("Cracking password without wordlist with Aircrack-ng not implemented yet.")
+            cap_file = input("Enter the capture file: ")
+            custom_input = generate_custom_input(lang_dict)
+            crack_password(cap_file, custom_input=custom_input)
         elif choice == '9':
-            print("Cracking password without wordlist with Hashcat not implemented yet.")
+            cap_file = input("Enter the capture file: ")
+            custom_input = generate_custom_input(lang_dict)
+            crack_password(cap_file, custom_input=custom_input, use_hashcat=True)
         elif choice == '10':
             print(lang_dict['exit_message'])
             break
