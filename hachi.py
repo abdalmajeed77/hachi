@@ -209,6 +209,25 @@ def main():
                 capture_packets(interface, bssid)
             else:
                 print("No network adapters found.")
+        elif choice == '5':
+            create_wordlist(lang_dict)
+        elif choice == '6':
+            cap_file = input("Enter the capture file: ")
+            wordlist = input("Enter wordlist file: ")
+            crack_password(cap_file, wordlist=wordlist)
+        elif choice == '7':
+            cap_file = input("Enter the capture file: ")
+            wordlist = input("Enter wordlist file: ")
+            crack_password(cap_file, wordlist=wordlist, use_gpu=True)
+        elif choice == '8':
+            cap_file = input("Enter the capture file: ")
+            custom_input = generate_custom_input(lang_dict)
+            crack_password(cap_file, custom_input=custom_input)
+        elif choice == '9':
+            cap_file = input("Enter the capture file: ")
+            custom_input = generate_custom_input(lang_dict)
+            crack_password(cap_file, custom_input=custom_input, use_hashcat=True)
+
         elif choice == "10":
             print("Exiting...")
             break
