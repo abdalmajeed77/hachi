@@ -105,18 +105,48 @@ def list_network_adapters():
     return adapters
 
 # Function to scan networks with channel hopping
-def scan_networks(interface, show_hidden, lang_dict):
-    networks = []
+def scan_networks(interface, show_hidden=True):
+    """
+    Scans for available networks using the specified interface.
+
+    Parameters:
+        interface (str): The network interface in monitor mode.
+        show_hidden (bool): Whether to include hidden networks in the results.
+
+    Returns:
+        list: A list of detected networks with SSID and BSSID.
+    """
+    enable_monitor_mode(interface)
+    networks = {}
 
     def packet_handler(packet):
         if packet.haslayer(Dot11Beacon):
-            ssid = packet[Dot11Elt].info.decode(errors='ignore')
+            ssid = packet[Dot11Elt].info.decode(errors='ignore') if packet[Dot11Elt].info else ''
             bssid = packet[Dot11].addr2
-            if ssid == '' and show_hidden:
-                ssid = '<Hidden>'
-            if {'ssid': ssid, 'bssid': bssid} not in networks:
-                networks.append({'ssid': ssid, 'bssid': bssid})
+            channel = int(ord(packet[Dot11Elt:3].info)) if packet[Dot11Elt:3] else None
+            if ssid == '' and not show_hidden:
+                return
+            networks[bssid] = {"SSID": ssid if ssid else "<Hidden>", "Channel": channel}
 
+    print(f"Scanning for networks on {interface} (Press Ctrl+C to stop)...")
+    try:
+        sniff(iface=interface, prn=packet_handler, timeout=10)
+    except KeyboardInterrupt:
+        print("\nScan interrupted by user.")
+    finally:
+        disable_monitor_mode(interface)
+
+    # Display networks
+    if networks:
+        print("\nDetected Networks:")
+        print(f"{'No.':<5}{'SSID':<30}{'BSSID':<20}{'Channel':<10}")
+        print("=" * 65)
+        for idx, (bssid, data) in enumerate(networks.items(), start=1):
+            print(f"{idx:<5}{data['SSID']:<30}{bssid:<20}{data['Channel']:<10}")
+    else:
+        print("\nNo networks detected.")
+    
+    return list(networks.values())
     print(lang_dict['scanning'])
     channels = [1, 6, 11]  # Common Wi-Fi channels
     for channel in channels:
