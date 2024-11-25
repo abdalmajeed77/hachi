@@ -1,6 +1,5 @@
 import subprocess
 from scapy.all import *
-import os
 from colorama import init, Fore, Style
 
 # Initialize colorama
@@ -56,7 +55,7 @@ def scan_networks(interface, show_hidden):
     
     def packet_handler(packet):
         if packet.haslayer(Dot11Beacon):
-            ssid = packet[Dot11Elt].info.decode(errors='ignore')
+            ssid = packet[Dot11Elt].info.decode(errors='ignore') if packet[Dot11Elt].info else ""
             bssid = packet[Dot11].addr2
             if ssid == '' and show_hidden:
                 ssid = '<Hidden>'
@@ -97,56 +96,13 @@ def create_wordlist():
     except Exception as e:
         print(f"Error creating wordlist: {e}")
 
-def generate_custom_input():
-    try:
-        length = int(input("Enter the length of the password to crack: "))
-        use_uppercase = input("Include uppercase letters? (y/n): ").lower() == 'y'
-        use_lowercase = input("Include lowercase letters? (y/n): ").lower() == 'y'
-        use_digits = input("Include digits? (y/n): ").lower() == 'y'
-        use_special = input("Include special characters? (y/n): ").lower() == 'y'
-
-        charset = ''
-        if use_uppercase:
-            charset += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-        if use_lowercase:
-            charset += 'abcdefghijklmnopqrstuvwxyz'
-        if use_digits:
-            charset += '0123456789'
-        if use_special:
-            charset += '!@#$%^&*()-_=+[]{}|;:<>,.?/~`'
-
-        return charset, length
-    except ValueError:
-        print("Invalid input. Please try again.")
-        return '', 0
-
-def crack_password(cap_file, wordlist=None, use_gpu=False, custom_input=None, use_hashcat=False):
+def crack_password(cap_file, wordlist=None):
     try:
         if wordlist:
-            if use_gpu:
-                print(f"Cracking password using {wordlist} with Hashcat...")
-                subprocess.run(["hashcat", "-m", "2500", cap_file, wordlist], check=True)
-            else:
-                print(f"Cracking password using {wordlist} with Aircrack-ng...")
-                subprocess.run(["aircrack-ng", "-w", wordlist, cap_file], check=True)
-        elif custom_input:
-            charset, length = custom_input
-            if not charset or not length:
-                print("Invalid custom input. Please try again.")
-                return
-
-            if use_hashcat:
-                hashcat_mask = '?1' * length
-                hashcat_charsets = f'-1{charset}'
-                print(f"Cracking password using custom input with Hashcat...")
-                subprocess.run(["hashcat", "-m", "2500", hashcat_charsets, cap_file, hashcat_mask], check=True)
-            else:
-                print(f"Cracking password using custom input with Aircrack-ng...")
-                wordlist_file = "custom_wordlist.txt"
-                with open(wordlist_file, 'w') as f:
-                    for i in range(10**length):
-                        f.write(f"{i:0{length}}\n")
-                subprocess.run(["aircrack-ng", "-w", wordlist_file, cap_file], check=True)
+            print(f"Cracking password using {wordlist} with Aircrack-ng...")
+            subprocess.run(["aircrack-ng", "-w", wordlist, cap_file], check=True)
+        else:
+            print("Error: No wordlist provided.")
     except Exception as e:
         print(f"Error cracking password: {e}")
 
@@ -167,11 +123,8 @@ def main():
         print("3. Scan Networks")
         print("4. Capture Packets")
         print("5. Create Wordlist")
-        print("6. Crack Password (CPU)")
-        print("7. Crack Password (GPU with Hashcat)")
-        print("8. Crack Password Without Wordlist (Custom Input with Aircrack-ng)")
-        print("9. Crack Password Without Wordlist (Custom Input with Hashcat)")
-        print("10. Exit")
+        print("6. Crack Password")
+        print("7. Exit")
         
         choice = input("Enter your choice: ")
         
@@ -209,9 +162,9 @@ def main():
                 capture_packets(interface, bssid)
             else:
                 print("No network adapters found.")
-        elif choice == '5':
-            create_wordlist(lang_dict)
-        elif choice == '6':
+        elif choice == "5":
+            create_wordlist()
+        elif choice == "6":
             cap_file = input("Enter the capture file: ")
             wordlist = input("Enter wordlist file: ")
             crack_password(cap_file, wordlist=wordlist)
