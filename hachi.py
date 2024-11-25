@@ -104,6 +104,20 @@ def list_network_adapters():
     adapters = [line.split()[0] for line in lines if 'IEEE' in line]
     return adapters
 
+# Function to enable monitor mode on the interface
+def enable_monitor_mode(interface):
+    print(f"Enabling monitor mode on {interface}...")
+    subprocess.run(["sudo", "ip", "link", "set", interface, "down"], check=True)
+    subprocess.run(["sudo", "iw", interface, "set", "type", "monitor"], check=True)
+    subprocess.run(["sudo", "ip", "link", "set", interface, "up"], check=True)
+
+# Function to disable monitor mode on the interface
+def disable_monitor_mode(interface):
+    print(f"Disabling monitor mode on {interface}...")
+    subprocess.run(["sudo", "ip", "link", "set", interface, "down"], check=True)
+    subprocess.run(["sudo", "iw", interface, "set", "type", "managed"], check=True)
+    subprocess.run(["sudo", "ip", "link", "set", interface, "up"], check=True)
+
 # Function to scan networks with channel hopping
 def scan_networks(interface, show_hidden=True):
     """
@@ -129,8 +143,14 @@ def scan_networks(interface, show_hidden=True):
             networks[bssid] = {"SSID": ssid if ssid else "<Hidden>", "Channel": channel}
 
     print(f"Scanning for networks on {interface} (Press Ctrl+C to stop)...")
+
     try:
-        sniff(iface=interface, prn=packet_handler, timeout=10)
+        # Channel hopping on common Wi-Fi channels (1, 6, 11)
+        channels = [1, 6, 11]
+        for channel in channels:
+            os.system(f"sudo iw dev {interface} set channel {channel}")
+            sniff(iface=interface, prn=packet_handler, timeout=5)
+
     except KeyboardInterrupt:
         print("\nScan interrupted by user.")
     finally:
@@ -147,16 +167,6 @@ def scan_networks(interface, show_hidden=True):
         print("\nNo networks detected.")
     
     return list(networks.values())
-    print(lang_dict['scanning'])
-    channels = [1, 6, 11]  # Common Wi-Fi channels
-    for channel in channels:
-        os.system(f"iwconfig {interface} channel {channel}")
-        sniff(iface=interface, prn=packet_handler, timeout=5)
-
-    print(lang_dict['available_networks'])
-    for i, net in enumerate(networks):
-        print(f"{i + 1}. SSID: {net['ssid']} | BSSID: {net['bssid']}")
-    return networks
 
 # Function to capture packets
 def capture_packets(interface, bssid, lang_dict):
