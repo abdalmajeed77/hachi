@@ -132,7 +132,7 @@ def scan_networks(interface, show_hidden, lang_dict):
     print(lang_dict['available_networks'])
     for i, net in enumerate(networks):
         print(f"{i + 1}. SSID: {net['ssid']} | BSSID: {net['bssid']}")
-    
+
     return networks
 
 # Function to capture packets
@@ -191,7 +191,7 @@ def crack_password(cap_file, wordlist=None, use_gpu=False, custom_input=None, us
             hashcat_charsets = f'-1 {charset}'
 
             print(f"Cracking password using custom input with Hashcat...")
-            subprocess.run(["hashcat", "-m", "2500", hashcat_charsets, cap_file, hashcat_mask], check=True
+            subprocess.run(["hashcat", "-m", "2500", hashcat_charsets, cap_file, hashcat_mask], check=True)
         else:
             print(f"Cracking password using custom input with Aircrack-ng...")
             wordlist_file = "custom_wordlist.txt"
@@ -199,10 +199,8 @@ def crack_password(cap_file, wordlist=None, use_gpu=False, custom_input=None, us
                 for ch1 in charset:
                     for ch2 in charset:
                         for ch3 in charset:
-                            # Continue this for the length of the password
                             if length == 3:
                                 f.write(f"{ch1}{ch2}{ch3}\n")
-                            # Add more nested loops for longer passwords
 
             subprocess.run(["aircrack-ng", "-w", wordlist_file, cap_file], check=True)
 
