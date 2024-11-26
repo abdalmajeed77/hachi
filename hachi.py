@@ -99,36 +99,56 @@ def list_network_adapters():
 
 # Function to enable monitor mode
 def enable_monitor_mode(interface):
-    subprocess.run(['sudo', 'ifconfig', interface, 'down'], check=True)
-    subprocess.run(['sudo', 'iwconfig', interface, 'mode', 'monitor'], check=True)
-    subprocess.run(['sudo', 'ifconfig', interface, 'up'], check=True)
-    print(f"Enabled monitor mode on {interface}")
+    try:
+        subprocess.run(['sudo', 'ifconfig', interface, 'down'], check=True)
+        subprocess.run(['sudo', 'iwconfig', interface, 'mode', 'monitor'], check=True)
+        subprocess.run(['sudo', 'ifconfig', interface, 'up'], check=True)
+        print(f"Enabled monitor mode on {interface}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error enabling monitor mode: {e}")
+        exit(1)
+
 
 # Function to disable monitor mode
 def disable_monitor_mode(interface):
-    subprocess.run(['sudo', 'ifconfig', interface, 'down'], check=True)
-    subprocess.run(['sudo', 'iwconfig', interface, 'mode', 'managed'], check=True)
-    subprocess.run(['sudo', 'ifconfig', interface, 'up'], check=True)
-    print(f"Disabled monitor mode on {interface}")
+    try:
+        subprocess.run(['sudo', 'ifconfig', interface, 'down'], check=True)
+        subprocess.run(['sudo', 'iwconfig', interface, 'mode', 'managed'], check=True)
+        subprocess.run(['sudo', 'ifconfig', interface, 'up'], check=True)
+        print(f"Disabled monitor mode on {interface}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error disabling monitor mode: {e}")
+        exit(1)
+
 
 # Function to scan networks
-def scan_networks(interface, show_hidden, lang_dict):
+def scan_networks(interface, show_hidden=True, lang_dict={'available_networks': 'Available Networks:'}):
     networks = []
-    
+
     def packet_handler(packet):
+        # Filter beacon and probe response frames
         if packet.haslayer(Dot11Beacon) or packet.haslayer(Dot11ProbeResp):
-            ssid = packet[Dot11Elt].info.decode(errors='ignore')
-            bssid = packet[Dot11].addr2
-            if ssid == '' and show_hidden:
-                ssid = '<Hidden>'
-            if {'ssid': ssid, 'bssid': bssid} not in networks:
-                networks.append({'ssid': ssid, 'bssid': bssid})
+            try:
+                ssid = packet[Dot11Elt].info.decode(errors='ignore')  # Extract SSID
+                bssid = packet[Dot11].addr2  # Extract BSSID
+                if ssid == '' and show_hidden:  # Handle hidden networks
+                    ssid = '<Hidden>'
+                # Add network to list if not already added
+                if {'ssid': ssid, 'bssid': bssid} not in networks:
+                    networks.append({'ssid': ssid, 'bssid': bssid})
+                    print(f"Found Network - SSID: {ssid}, BSSID: {bssid}")
+            except Exception as e:
+                print(f"Error processing packet: {e}")
 
     print(f"Scanning for networks on {interface}...")
-    enable_monitor_mode(interface)
-    sniff(iface=interface, prn=packet_handler, timeout=10)
-    disable_monitor_mode(interface)
+    enable_monitor_mode(interface)  # Enable monitor mode
 
+    try:
+        sniff(iface=interface, prn=packet_handler, timeout=10, store=False)  # Capture packets
+    finally:
+        disable_monitor_mode(interface)  # Revert interface mode
+
+    # Display results
     print(lang_dict['available_networks'])
     for i, net in enumerate(networks):
         print(f"{i + 1}. SSID: {net['ssid']} | BSSID: {net['bssid']}")
