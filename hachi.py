@@ -98,6 +98,30 @@ def list_network_adapters():
     return adapters
 
 # Function to enable monitor mode
+def enable_monitor_mode(interface):
+    try:
+        subprocess.run(['sudo', 'ifconfig', interface, 'down'], check=True)
+        subprocess.run(['sudo', 'iwconfig', interface, 'mode', 'monitor'], check=True)
+        subprocess.run(['sudo', 'ifconfig', interface, 'up'], check=True)
+        print(f"Enabled monitor mode on {interface}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error enabling monitor mode: {e}")
+        exit(1)
+
+
+# Function to disable monitor mode
+def disable_monitor_mode(interface):
+    try:
+        subprocess.run(['sudo', 'ifconfig', interface, 'down'], check=True)
+        subprocess.run(['sudo', 'iwconfig', interface, 'mode', 'managed'], check=True)
+        subprocess.run(['sudo', 'ifconfig', interface, 'up'], check=True)
+        print(f"Disabled monitor mode on {interface}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error disabling monitor mode: {e}")
+        exit(1)
+
+
+# Function to scan networks
 def scan_networks(interface, show_hidden=True, lang_dict={'available_networks': 'Available Networks:'}):
     networks = []
 
@@ -120,9 +144,7 @@ def scan_networks(interface, show_hidden=True, lang_dict={'available_networks': 
     enable_monitor_mode(interface)  # Enable monitor mode
 
     try:
-        sniff(iface=interface, prn=packet_handler, timeout=30, store=False)  # Capture packets
-    except Exception as e:
-        print(f"Error sniffing packets: {e}")
+        sniff(iface=interface, prn=packet_handler, timeout=10, store=False)  # Capture packets
     finally:
         disable_monitor_mode(interface)  # Revert interface mode
 
@@ -172,34 +194,57 @@ def generate_custom_input(lang_dict):
     return charset, length
 
 # Function to crack password using aircrack or hashcat
+import subprocess
+import itertools
+
+
 def crack_password(cap_file, wordlist=None, use_gpu=False, custom_input=None, use_hashcat=False):
-    if wordlist:
-        if use_gpu:
-            print(f"Cracking password using {wordlist} with Hashcat...")
-            subprocess.run(["hashcat", "-m", "2500", cap_file, wordlist], check=True)
-        else:
-            print(f"Cracking password using {wordlist} with Aircrack-ng...")
-            subprocess.run(["aircrack-ng", "-w", wordlist, cap_file], check=True)
-    elif custom_input:
-        charset, length = custom_input
-        if use_hashcat:
-            # Construct Hashcat mask based on user input
-            hashcat_mask = '?1' * length
-            hashcat_charsets = f'-1 {charset}'
+    """
+    Cracks a Wi-Fi password using either Aircrack-ng or Hashcat.
 
-            print(f"Cracking password using custom input with Hashcat...")
-            subprocess.run(["hashcat", "-m", "2500", hashcat_charsets, cap_file, hashcat_mask], check=True)
-        else:
-            print(f"Cracking password using custom input with Aircrack-ng...")
-            wordlist_file = "custom_wordlist.txt"
-            with open(wordlist_file, 'w') as f:
-                for ch1 in charset:
-                    for ch2 in charset:
-                        for ch3 in charset:
-                            if length == 3:
-                                f.write(f"{ch1}{ch2}{ch3}\n")
+    Args:
+        cap_file (str): Path to the capture file (.cap or .hccapx).
+        wordlist (str): Path to the wordlist file (if any).
+        use_gpu (bool): Use GPU acceleration (requires Hashcat).
+        custom_input (tuple): Tuple containing (charset, length) for custom brute-force generation.
+        use_hashcat (bool): Use Hashcat instead of Aircrack-ng.
+    """
+    try:
+        if wordlist:
+            # Cracking using a wordlist
+            if use_gpu:
+                print(f"Cracking password using wordlist {wordlist} with Hashcat...")
+                subprocess.run(["hashcat", "-m", "2500", cap_file, wordlist], check=True)
+            else:
+                print(f"Cracking password using wordlist {wordlist} with Aircrack-ng...")
+                subprocess.run(["aircrack-ng", "-w", wordlist, cap_file], check=True)
 
-            subprocess.run(["aircrack-ng", "-w", wordlist_file, cap_file], check=True)
+        elif custom_input:
+            charset, length = custom_input
+
+            if use_hashcat:
+                # Generate Hashcat mask
+                hashcat_mask = '?1' * length
+                print(f"Cracking password using custom input with Hashcat...")
+                subprocess.run(["hashcat", "-m", "2500", "-a", "3", "-1", charset, cap_file, hashcat_mask], check=True)
+
+            else:
+                # Generate a custom wordlist file for Aircrack-ng
+                print(f"Generating custom wordlist for Aircrack-ng...")
+                wordlist_file = "custom_wordlist.txt"
+                with open(wordlist_file, 'w') as f:
+                    for word in itertools.product(charset, repeat=length):
+                        f.write(''.join(word) + '\n')
+
+                print(f"Cracking password using custom wordlist with Aircrack-ng...")
+                subprocess.run(["aircrack-ng", "-w", wordlist_file, cap_file], check=True)
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error during password cracking: {e}")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+
+
 
 # Install tools
 def install_tools():
